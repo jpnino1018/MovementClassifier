@@ -73,9 +73,9 @@ Multiple frames make up a sequence corresponding to a labeled action.
 ### 📚 Storage Strategy:
 Pose data (JSON files) will be saved in a shared cloud directory alongside video files for easy access by all collaborators.
 
-#### 📁 Folder Structure Example:
+#### 📁 Folder Structure:
 ```
-/project-root/
+/MovementClassifier/
 ├── videos/
 │   ├── raw/
 │   ├── processed/
