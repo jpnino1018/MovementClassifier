@@ -1,0 +1,43 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*.so
+
+# Virtual environment
+venv/
+.env/
+
+# Model files
+*.h5
+*.joblib
+*.pkl
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# IDE files
+.vscode/
+.idea/
+
+# Data and intermediate outputs
+*.csv
+*.json
+*.mp4
+*.mov
+*.avi
+*.log
+*.tmp
+
+# Training outputs
+*.ckpt
+checkpoint/
+logs/
+tensorboard/
+
+# Jupyter notebooks (if not versioned)
+*.ipynb_checkpoints
+
+# Output directories
+labeled_landmarks/
+test_outputs/
