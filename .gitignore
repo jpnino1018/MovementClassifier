@@ -41,3 +41,13 @@ tensorboard/
 # Output directories
 labeled_landmarks/
 test_outputs/
+
+# Ignore large files
+*.zip
+*.rar
+*.mp4
+*.mov
+*.avi
+
+# Ignore OS-specific files
+.DS_Store
