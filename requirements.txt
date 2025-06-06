@@ -8,3 +8,5 @@ matplotlib
 joblib
 tqdm
 tensorflow
+xgboost
+seaborn

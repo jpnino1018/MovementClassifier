@@ -6,6 +6,7 @@ import pandas as pd
 import joblib
 from collections import deque, Counter
 import time
+import numpy as np
 
 # === Setup ===
 cap = cv2.VideoCapture(0)
@@ -16,10 +17,25 @@ mp_draw = mp.solutions.drawing_utils
 # Load the trained model and scaler
 model = joblib.load('movement_classifier.joblib')
 scaler = joblib.load('scaler.joblib')
+label_encoder = joblib.load('label_encoder.joblib')
+feature_names = joblib.load('feature_names.joblib')
 
 # Prediction smoothing
 pred_buffer = deque(maxlen=10)
 last_frame = None
+
+def calculate_angle(a, b, c):
+    a = np.array(a)  # First
+    b = np.array(b)  # Mid
+    c = np.array(c)  # End
+    
+    radians = np.arctan2(c[1]-b[1], c[0]-b[0]) - np.arctan2(a[1]-b[1], a[0]-b[0])
+    angle = np.abs(radians*180.0/np.pi)
+    
+    if angle > 180.0:
+        angle = 360-angle
+        
+    return angle
 
 def get_xyz(landmarks, idx):
     lm = landmarks[idx.value]
@@ -53,7 +69,41 @@ while True:
 
     mp_draw.draw_landmarks(frame, results.pose_landmarks, mp_pose.POSE_CONNECTIONS)
     lm = results.pose_landmarks.landmark
+    
+    # --- Feature Extraction ---
     features = extract_landmark_features(lm)
+
+    # Extract landmarks for angle calculation
+    # Left side
+    left_shoulder = get_xyz(lm, mp_pose.PoseLandmark.LEFT_SHOULDER)
+    left_hip = get_xyz(lm, mp_pose.PoseLandmark.LEFT_HIP)
+    left_knee = get_xyz(lm, mp_pose.PoseLandmark.LEFT_KNEE)
+    left_ankle = get_xyz(lm, mp_pose.PoseLandmark.LEFT_ANKLE)
+
+    # Right side
+    right_shoulder = get_xyz(lm, mp_pose.PoseLandmark.RIGHT_SHOULDER)
+    right_hip = get_xyz(lm, mp_pose.PoseLandmark.RIGHT_HIP)
+    right_knee = get_xyz(lm, mp_pose.PoseLandmark.RIGHT_KNEE)
+    right_ankle = get_xyz(lm, mp_pose.PoseLandmark.RIGHT_ANKLE)
+
+    # Midpoints for trunk
+    mid_shoulder = features['shoulders_x'], features['shoulders_y'], features['shoulders_z']
+    mid_hip = features['hips_x'], features['hips_y'], features['hips_z']
+
+    # Calculate angles
+    left_knee_angle = calculate_angle(left_hip, left_knee, left_ankle)
+    left_hip_angle = calculate_angle(left_shoulder, left_hip, left_knee)
+    right_knee_angle = calculate_angle(right_hip, right_knee, right_ankle)
+    right_hip_angle = calculate_angle(right_shoulder, right_hip, right_knee)
+    vertical_ref_point = [mid_hip[0], mid_hip[1] - 1] 
+    trunk_inclination = calculate_angle(vertical_ref_point, mid_hip, mid_shoulder)
+
+    # Add new features to dictionary
+    features['left_knee_angle'] = left_knee_angle
+    features['left_hip_angle'] = left_hip_angle
+    features['right_knee_angle'] = right_knee_angle
+    features['right_hip_angle'] = right_hip_angle
+    features['trunk_inclination'] = trunk_inclination
 
     df = pd.DataFrame([features])
 
@@ -66,10 +116,15 @@ while True:
             df[f'delta_{col}'] = 0
 
     last_frame = features.copy()
+    
+    # Ensure column order matches the training order
+    df = df[feature_names]
+    
     scaled = scaler.transform(df)
 
     probs = model.predict_proba(scaled)[0]
-    prediction = model.predict(scaled)[0]
+    prediction_encoded = model.predict(scaled)[0]
+    prediction = label_encoder.inverse_transform([prediction_encoded])[0]
     confidence = max(probs)
 
     # Smooth predictions
@@ -79,6 +134,17 @@ while True:
     # Display prediction
     cv2.putText(frame, f'Movement: {smoothed_pred} ({confidence:.2f})', (10, 30),
                 cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
+
+    # Display new features
+    # Use averages for display to simplify
+    avg_knee_angle = (left_knee_angle + right_knee_angle) / 2
+    avg_hip_angle = (left_hip_angle + right_hip_angle) / 2
+    cv2.putText(frame, f'Knee Angle: {avg_knee_angle:.1f}', (10, 90),
+                cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 150, 0), 2)
+    cv2.putText(frame, f'Hip Angle: {avg_hip_angle:.1f}', (10, 120),
+                cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 150, 0), 2)
+    cv2.putText(frame, f'Trunk Incl: {trunk_inclination:.1f}', (10, 150),
+                cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 150, 0), 2)
 
     # Display FPS
     fps = 1 / (time.time() - start_time)

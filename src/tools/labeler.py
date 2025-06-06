@@ -3,6 +3,7 @@ import cv2
 import json
 from tqdm import tqdm
 import mediapipe as mp
+import numpy as np
 
 # === Setup ===
 VIDEOS_DIR = 'videos'
@@ -12,6 +13,19 @@ mp_pose = mp.solutions.pose
 pose = mp_pose.Pose()
 
 os.makedirs(OUTPUT_DIR, exist_ok=True)
+
+def calculate_angle(a, b, c):
+    a = np.array(a)  # First
+    b = np.array(b)  # Mid
+    c = np.array(c)  # End
+    
+    radians = np.arctan2(c[1]-b[1], c[0]-b[0]) - np.arctan2(a[1]-b[1], a[0]-b[0])
+    angle = np.abs(radians*180.0/np.pi)
+    
+    if angle > 180.0:
+        angle = 360-angle
+        
+    return angle
 
 def get_xyz(landmarks, idx):
     lm = landmarks[idx.value]
@@ -48,6 +62,33 @@ for label in os.listdir(VIDEOS_DIR):
 
             if results.pose_landmarks:
                 lm = results.pose_landmarks.landmark
+                
+                # Extract landmarks for angle calculation
+                left_shoulder = get_xyz(lm, mp_pose.PoseLandmark.LEFT_SHOULDER)
+                right_shoulder = get_xyz(lm, mp_pose.PoseLandmark.RIGHT_SHOULDER)
+                mid_shoulder = avg_xyz(lm, mp_pose.PoseLandmark.LEFT_SHOULDER, mp_pose.PoseLandmark.RIGHT_SHOULDER)
+
+                left_hip = get_xyz(lm, mp_pose.PoseLandmark.LEFT_HIP)
+                right_hip = get_xyz(lm, mp_pose.PoseLandmark.RIGHT_HIP)
+                mid_hip = avg_xyz(lm, mp_pose.PoseLandmark.LEFT_HIP, mp_pose.PoseLandmark.RIGHT_HIP)
+
+                left_knee = get_xyz(lm, mp_pose.PoseLandmark.LEFT_KNEE)
+                right_knee = get_xyz(lm, mp_pose.PoseLandmark.RIGHT_KNEE)
+
+                left_ankle = get_xyz(lm, mp_pose.PoseLandmark.LEFT_ANKLE)
+                right_ankle = get_xyz(lm, mp_pose.PoseLandmark.RIGHT_ANKLE)
+
+                # Calculate angles
+                left_knee_angle = calculate_angle(left_hip, left_knee, left_ankle)
+                right_knee_angle = calculate_angle(right_hip, right_knee, right_ankle)
+                left_hip_angle = calculate_angle(left_shoulder, left_hip, left_knee)
+                right_hip_angle = calculate_angle(right_shoulder, right_hip, right_knee)
+                
+                # Trunk inclination (angle of hips-shoulders line with vertical)
+                # We can approximate this by using the angle with a horizontal line
+                vertical_ref_point = [mid_hip[0], mid_hip[1] - 1] # A point directly above the hip
+                trunk_inclination = calculate_angle(vertical_ref_point, mid_hip, mid_shoulder)
+
                 output.append({
                     "frame": frame_num,
                     "timestamp": round(frame_num / fps, 2),
@@ -58,6 +99,13 @@ for label in os.listdir(VIDEOS_DIR):
                         "hips": avg_xyz(lm, mp_pose.PoseLandmark.LEFT_HIP, mp_pose.PoseLandmark.RIGHT_HIP),
                         "knees": avg_xyz(lm, mp_pose.PoseLandmark.LEFT_KNEE, mp_pose.PoseLandmark.RIGHT_KNEE),
                         "ankles": avg_xyz(lm, mp_pose.PoseLandmark.LEFT_ANKLE, mp_pose.PoseLandmark.RIGHT_ANKLE),
+                    },
+                    "features": {
+                        "left_knee_angle": left_knee_angle,
+                        "right_knee_angle": right_knee_angle,
+                        "left_hip_angle": left_hip_angle,
+                        "right_hip_angle": right_hip_angle,
+                        "trunk_inclination": trunk_inclination
                     },
                     "label": label
                 })

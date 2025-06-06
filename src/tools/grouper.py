@@ -34,6 +34,7 @@ def convert_landmarks_to_csv():
         # Process each frame
         for frame_data in data:
             landmarks = frame_data['landmarks']
+            features = frame_data.get('features', {}) # Use .get for backwards compatibility
             
             # Flatten the landmark dictionary
             flat_data = {
@@ -47,6 +48,10 @@ def convert_landmarks_to_csv():
                 flat_data[f'{part}_x'] = coords[0]
                 flat_data[f'{part}_y'] = coords[1]
                 flat_data[f'{part}_z'] = coords[2]
+
+            # Add the new features
+            for feature_name, value in features.items():
+                flat_data[feature_name] = value
             
             all_data.append(flat_data)
     
